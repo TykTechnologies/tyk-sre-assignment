@@ -1,6 +1,6 @@
 # tyk-sre-assignment
 
-This repository contains the boilerplate projects for the SRE role interview assignments. There are two projects for Go and Python respectively.
+This repository contains the boilerplate projects for the SRE role interview assignments. There are two projects: one for Go and one for Python respectively.
 
 ### Go Project
 
