@@ -23,7 +23,6 @@ class AppHandler(BaseHTTPRequestHandler):
     def k8s_health_check(self):
         """Performs a health check to verify communication with the Kubernetes API server"""
         try:
-            config.load_kube_config()  # Load k8s configuration
             api_instance = client.CoreV1Api()
             api_instance.list_namespace()  # Perform a simple request to test connectivity
             self.respond(200, "Kubernetes API server is reachable")
@@ -32,34 +31,47 @@ class AppHandler(BaseHTTPRequestHandler):
             self.respond(500, f"Failed to connect to Kubernetes API server: {str(e)}")
 
     def deployments_info(self):
-      """Get information about deployments and check healthy pods"""
-      api_client = client.ApiClient()
-      deployments = get_deployments(api_client)
-      deployment_info = []
+        """Get information about deployments and check healthy pods"""
+        api_client = client.ApiClient()
+        try:
+            deployments = get_deployments(api_client)
+        except Exception as e:
+            self.respond(500, f"Failed to retrieve deployments: {e}")
+            return
 
-      for deployment in deployments:
-          desired_replicas = deployment.spec.replicas
-          current_replicas = count_healthy_pods(api_client, deployment)
-          status = "OK" if desired_replicas == current_replicas else "NOK"
+        if deployments is None:
+            self.respond(500, "Failed to retrieve deployments: deployments is None")
+            return
 
-          deployment_data = {
-              "name": deployment.metadata.name,
-              "namespace": deployment.metadata.namespace,
-              "desired_replicas": desired_replicas,
-              "current_replicas": current_replicas,
-              "status": status
-          }
-          deployment_info.append(deployment_data)
+        deployment_info = []
+        for deployment in deployments:
+            try:
+                desired_replicas = deployment.spec.replicas
+                current_replicas = count_healthy_pods(api_client, deployment)
+                status = "OK" if desired_replicas == current_replicas else "NOK"
+            except Exception as e:
+                self.respond(500, f"Error processing deployment {deployment.metadata.name}: {e}")
+                return
 
-      # Output each deployment info as newline
-      deployment_lines = [json.dumps(info) for info in deployment_info]
-      deployment_json = '\n'.join(deployment_lines)
+            deployment_data = {
+                "name": deployment.metadata.name,
+                "namespace": deployment.metadata.namespace,
+                "desired_replicas": desired_replicas,
+                "current_replicas": current_replicas,
+                "status": status
+            }
+            deployment_info.append(deployment_data)
 
-      # Write JSON data directly to the response socket
-      self.send_response(200)
-      self.send_header('Content-Type', 'application/json')
-      self.end_headers()
-      self.wfile.write(bytes(deployment_json, "UTF-8"))
+        # Output each deployment info as newline
+        deployment_lines = [json.dumps(info) for info in deployment_info]
+        deployment_json = '\n'.join(deployment_lines)
+
+        # Write JSON data directly to the response socket
+        self.send_response(200)
+        self.send_header('Content-Type', 'application/json')
+        self.end_headers()
+        self.wfile.write(bytes(deployment_json, "UTF-8"))
+
       
     def respond(self, status: int, content: str):
         """Writes content and status code to the response socket"""
@@ -98,7 +110,7 @@ def start_server(address):
         print("Server listening on {}".format(address))
         httpd.serve_forever()
 
-def get_deployments(api_client, namespace='default'):
+def get_deployments(api_client: client.ApiClient, namespace='default'):
     """Retrieve a list of all deployments in the Kubernetes cluster."""
     api_instance = client.AppsV1Api(api_client)
     try:
@@ -107,7 +119,7 @@ def get_deployments(api_client, namespace='default'):
     except Exception as e:
         print(f"Error retrieving deployments: {e}")
 
-def count_healthy_pods(api_client, deployment, namespace='default'):
+def count_healthy_pods(api_client: client.ApiClient, deployment, namespace='default'):
     """Count the number of healthy pods for a given deployment."""
     api_instance = client.CoreV1Api(api_client)
     pod_labels = deployment.spec.selector.match_labels
