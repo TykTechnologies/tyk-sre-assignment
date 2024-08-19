@@ -1,9 +1,29 @@
 import sys
 import argparse
 
+import logging
+import time
+import threading
+
 from kubernetes import client, config
 
 from app import app
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+def check_k8s_api_health(api_client):
+    """
+    Periodically checks and logs the K8s api server health.
+    """
+    while True:
+        try:
+            version = app.get_kubernetes_version(api_client)
+            logger.info("Kubernetes API server is healthy. Version: %s", version)
+        except Exception as e:
+            logger.error("Kubernetes API server health check failed: %s", e)
+        time.sleep(5) #checks every 5s.
 
 
 if __name__ == "__main__":
@@ -21,6 +41,10 @@ if __name__ == "__main__":
         config.load_incluster_config()
 
     api_client = client.ApiClient()
+
+    health_check_thread = threading.Thread(target=check_k8s_api_health, args=(api_client,))
+    health_check_thread.daemon = True
+    health_check_thread.start()
 
     try:
         version = app.get_kubernetes_version(api_client)
