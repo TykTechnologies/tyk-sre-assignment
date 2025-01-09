@@ -1,4 +1,4 @@
-module github.com/TykTechnology/tyk-sre-assignment
+module github.com/TykTechnologies/tyk-sre-assignment
 
 go 1.19
 
